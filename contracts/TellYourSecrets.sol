@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.2;
+pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
@@ -7,17 +7,19 @@ import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 
-contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable {
+contract TellYourSecrets is
+    ERC721,
+    ERC721Enumerable,
+    ERC721URIStorage,
+    Ownable
+{
     using Counters for Counters.Counter;
 
     Counters.Counter private _tokenIdCounter;
 
     constructor() ERC721("Secrets", "SEC") {}
 
-    uint256 owners = 0;
-
     struct Secret {
-        uint256 tokenId;
         address payable seller;
         address payable owner;
         uint256 price;
@@ -26,37 +28,29 @@ contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable 
 
     mapping(uint256 => Secret) private secrets;
 
-    function safeMint(string memory uri, uint256 price)
+    /// @dev checks if secret with id of tokenId exists
+    modifier exists(uint tokenId) {
+        require(_exists(tokenId), "Query of nonexistent secret");
+        _;
+    }
+
+    /**
+     * @dev allow users to mint an NFT representing their secret
+     * @notice secret will be put on sale
+     */
+    function addSecret(string calldata uri, uint256 price)
         public
         payable
         returns (uint256)
     {
+        require(bytes(uri).length > 0, "Empty uri");
+        require(price > 0, "Price must be at least 1 wei");
         uint256 tokenId = _tokenIdCounter.current();
         _tokenIdCounter.increment();
         _mint(msg.sender, tokenId);
 
         _setTokenURI(tokenId, uri);
-        addSecret(tokenId, price);
-        // setApprovalForAll(msg.sender, true);
-
-        return tokenId;
-    }
-
-    function makeTransfer(
-        address from,
-        address to,
-        uint256 tokenId
-    ) public {
-        
-        _transfer(from, to, tokenId);
-        secrets[tokenId].owner = payable(to);
-        owners++;
-    }
-
-    function addSecret(uint256 tokenId, uint256 price) private {
-        require(price > 0, "Price must be at least 1 wei");
         secrets[tokenId] = Secret(
-            tokenId,
             payable(msg.sender),
             payable(address(this)),
             price,
@@ -64,37 +58,54 @@ contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable 
         );
 
         _transfer(msg.sender, address(this), tokenId);
+        return tokenId;
     }
 
-    function ownSecret(uint256 tokenId) public payable {
-        uint256 price = secrets[tokenId].price;
-        address seller = secrets[tokenId].seller;
+    /**
+     * @dev allow users to buy a secret on sale
+     * @notice secret's selling price will be doubled after being bought but secret will no longer be on sale
+     */
+    function ownSecret(uint256 tokenId) public payable exists(tokenId) {
+        Secret storage currentSecret = secrets[tokenId];
+
+        require(!currentSecret.sold, "Secret is already sold");
         require(
-            msg.value >= price,
+            currentSecret.seller != msg.sender,
+            "You can't buy your own secret"
+        );
+        require(
+            msg.value == currentSecret.price,
             "Please submit the asking price in order to complete the purchase"
         );
-        secrets[tokenId].owner = payable(msg.sender);
-        secrets[tokenId].sold = true;
-        secrets[tokenId].seller = payable(address(0));
-        secrets[tokenId].price *= 2;
+        address seller = secrets[tokenId].seller;
+        currentSecret.owner = payable(msg.sender);
+        currentSecret.sold = true;
+        currentSecret.seller = payable(address(0));
+        currentSecret.price *= 2;
         _transfer(address(this), msg.sender, tokenId);
-
-        payable(seller).transfer(msg.value);
+        (bool success, ) = payable(seller).call{value: msg.value}("");
+        require(success, "Transfer of payment failed");
     }
 
-    function disownSecret(uint256 tokenId) public payable {
+    /**
+     * @dev allow users to put a secret back on sale
+     * @notice The NFT will be transferred to the smart contract
+     */
+    function disownSecret(uint256 tokenId) public payable exists(tokenId) {
+        Secret storage currentSecret = secrets[tokenId];
         require(
-            secrets[tokenId].owner == msg.sender,
+            currentSecret.owner == msg.sender,
             "Only item owner can perform this operation"
         );
-        secrets[tokenId].sold = false;
-        secrets[tokenId].seller = payable(msg.sender);
-        secrets[tokenId].owner = payable(address(this));
+        require(currentSecret.sold, "Secret is already sold");
+        currentSecret.sold = false;
+        currentSecret.seller = payable(msg.sender);
+        currentSecret.owner = payable(address(this));
 
         _transfer(msg.sender, address(this), tokenId);
     }
 
-    function getSecret(uint256 tokenId) public view returns (Secret memory) {
+    function getSecret(uint256 tokenId) public view exists(tokenId) returns (Secret memory) {
         return secrets[tokenId];
     }
 
@@ -102,11 +113,34 @@ contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable 
         return _tokenIdCounter.current();
     }
 
-    function getOwners() public view returns (uint256) {
-        return owners;
+    // The following functions are overrides required by Solidity.
+
+    /**
+     * @dev See {IERC721-transferFrom}.
+     * Changes is made to transferFrom to update the value of owner in the mapping secrets
+     */
+    function transferFrom(
+        address from,
+        address to,
+        uint256 tokenId
+    ) public override {
+        secrets[tokenId].owner = payable(to);
+        super.transferFrom(from, to, tokenId);
     }
 
-    // The following functions are overrides required by Solidity.
+    /**
+     * @dev See {IERC721-safeTransferFrom}.
+     * Changes is made to safeTransferFrom to update the value of owner in the mapping secrets
+     */
+    function safeTransferFrom(
+        address from,
+        address to,
+        uint256 tokenId,
+        bytes memory data
+    ) public override {
+        secrets[tokenId].owner = payable(to);
+        _safeTransfer(from, to, tokenId, data);
+    }
 
     function _beforeTokenTransfer(
         address from,
