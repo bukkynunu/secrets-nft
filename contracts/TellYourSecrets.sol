@@ -21,7 +21,7 @@ contract TellYourSecrets is
 
     struct Secret {
         address payable seller;
-        address payable owner;
+        address owner;
         uint256 price;
         bool sold;
     }
@@ -52,7 +52,7 @@ contract TellYourSecrets is
         _setTokenURI(tokenId, uri);
         secrets[tokenId] = Secret(
             payable(msg.sender),
-            payable(address(this)),
+            address(this),
             price,
             false
         );
@@ -78,7 +78,7 @@ contract TellYourSecrets is
             "Please submit the asking price in order to complete the purchase"
         );
         address seller = secrets[tokenId].seller;
-        currentSecret.owner = payable(msg.sender);
+        currentSecret.owner = msg.sender;
         currentSecret.sold = true;
         currentSecret.seller = payable(address(0));
         currentSecret.price *= 2;
@@ -100,12 +100,17 @@ contract TellYourSecrets is
         require(currentSecret.sold, "Secret is already sold");
         currentSecret.sold = false;
         currentSecret.seller = payable(msg.sender);
-        currentSecret.owner = payable(address(this));
+        currentSecret.owner = address(this);
 
         _transfer(msg.sender, address(this), tokenId);
     }
 
-    function getSecret(uint256 tokenId) public view exists(tokenId) returns (Secret memory) {
+    function getSecret(uint256 tokenId)
+        public
+        view
+        exists(tokenId)
+        returns (Secret memory)
+    {
         return secrets[tokenId];
     }
 
@@ -117,20 +122,23 @@ contract TellYourSecrets is
 
     /**
      * @dev See {IERC721-transferFrom}.
-     * Changes is made to transferFrom to update the value of owner in the mapping secrets
+     * Changes is made to transferFrom to update the value of owner, sold and seller in the mapping secrets
      */
     function transferFrom(
         address from,
         address to,
         uint256 tokenId
     ) public override {
-        secrets[tokenId].owner = payable(to);
+        Secret storage currentSecret = secrets[tokenId];
+        currentSecret.owner = payable(to);
+        currentSecret.sold = true;
+        currentSecret.seller = payable(address(0));
         super.transferFrom(from, to, tokenId);
     }
 
     /**
      * @dev See {IERC721-safeTransferFrom}.
-     * Changes is made to safeTransferFrom to update the value of owner in the mapping secrets
+     * Changes is made to safeTransferFrom to update the value of owner, sold and seller in the mapping secrets
      */
     function safeTransferFrom(
         address from,
@@ -138,7 +146,10 @@ contract TellYourSecrets is
         uint256 tokenId,
         bytes memory data
     ) public override {
-        secrets[tokenId].owner = payable(to);
+        Secret storage currentSecret = secrets[tokenId];
+        currentSecret.owner = payable(to);
+        currentSecret.sold = true;
+        currentSecret.seller = payable(address(0));
         _safeTransfer(from, to, tokenId, data);
     }
 
