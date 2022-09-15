@@ -5,6 +5,8 @@ This dapp is an anonymous dapp where users post their secrets or things they wan
 ## How it Works
 Users can mint their secrets and have it bought or sold when a secret is bought it doubles in price and there is an option to gift the NFT to another user, so if a secret is very touching, they can be rewarded for posting.
 
+https://idyllic-bunny-bffa1c.netlify.app/
+
 ### :man_technologist: Technologies
 
 Frameworks and libraries used in this project include:
