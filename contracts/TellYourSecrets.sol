@@ -26,6 +26,11 @@ contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable 
 
     mapping(uint256 => Secret) private secrets;
 
+    modifier onlyOwner(uint tokenId){
+        require(msg.sender == secrets[tokenId].owner,"Only item owner can perform this operation");
+        _;
+    }
+
     function safeMint(string memory uri, uint256 price)
         public
         payable
@@ -46,7 +51,7 @@ contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable 
         address from,
         address to,
         uint256 tokenId
-    ) public {
+    ) public onlyOwner(tokenId){
         
         _transfer(from, to, tokenId);
         secrets[tokenId].owner = payable(to);
@@ -69,6 +74,7 @@ contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable 
     function ownSecret(uint256 tokenId) public payable {
         uint256 price = secrets[tokenId].price;
         address seller = secrets[tokenId].seller;
+        require(msg.sender != seller); 
         require(
             msg.value >= price,
             "Please submit the asking price in order to complete the purchase"
@@ -82,11 +88,7 @@ contract TellYourSecrets is ERC721, ERC721Enumerable, ERC721URIStorage, Ownable 
         payable(seller).transfer(msg.value);
     }
 
-    function disownSecret(uint256 tokenId) public payable {
-        require(
-            secrets[tokenId].owner == msg.sender,
-            "Only item owner can perform this operation"
-        );
+    function disownSecret(uint256 tokenId) public payable onlyOwner(tokenId){
         secrets[tokenId].sold = false;
         secrets[tokenId].seller = payable(msg.sender);
         secrets[tokenId].owner = payable(address(this));
